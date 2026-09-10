@@ -1,0 +1,67 @@
+name: security · sbom
+
+# Generates a CycloneDX SBOM on every push to main and attaches it to
+# releases. Also runs a dependency audit and fails on high/critical
+# advisories that have a fix available.
+# Additive to upstream CI; safe to remove without breaking other jobs.
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom-and-audit:
+    name: SBOM + audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit (high or critical, fix available)
+        # Fail only when a fix is available; do not block on unfixable
+        # transitive advisories until upstream releases.
+        run: pnpm audit --audit-level=high --prod || {
+          echo "::warning::pnpm audit reported high/critical advisories; review the log";
+          exit 1;
+        }
+
+      - name: Generate CycloneDX SBOM
+        run: npx --yes @cyclonedx/cdxgen@latest -t js -o sbom-cyclonedx.json --project-name cl-eveland --spec-version 1.5
+        env:
+          FETCH_LICENSE: true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom-cyclonedx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach SBOM to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" sbom-cyclonedx.json --clobber
