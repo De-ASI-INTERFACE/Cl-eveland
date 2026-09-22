@@ -7,3 +7,9 @@
 /docker-compose.prod.yml @mechiland
 /pnpm-lock.yaml @mechiland
 /pnpm-workspace.yaml @mechiland
+
+# --- De-ASI-INTERFACE fork governance additions (2026-09-10) ---
+# These paths belong to the fork's governance layer. Upstream contributions
+# to these paths must be reviewed by the fork owner.
+/.github/workflows/security-*.yml @De-ASI-INTERFACE
+/GOVERNANCE.md @De-ASI-INTERFACE
